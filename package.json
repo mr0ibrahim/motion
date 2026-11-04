@@ -1,3 +1,12 @@
-{ "name": "motion", "version": "1.0.0", "private": true, "type": "module", "license": "MIT",
-  "description": "Motion graphics studio skill: HTML/JS animation rendered to MP4",
-  "dependencies": { "playwright": "^1.48.0" } }
+{
+  "name": "motion-graphics-skill",
+  "version": "2.0.0",
+  "description": "Motion graphics studio skill for AI coding agents (Claude Code, Cursor, Codex, OpenCode, Gemini CLI, Copilot, Windsurf): storyboard, AI assets, code animation, SFX and QA to MP4.",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "motion-graphics-skill": "bin/install.mjs" },
+  "files": ["bin", "skills/motion-graphics/**", "!**/node_modules"],
+  "keywords": ["agent-skill", "skills", "claude-code", "cursor", "codex", "opencode", "motion-graphics"],
+  "repository": { "type": "git", "url": "git+https://github.com/mr0ibrahim/motion.git" },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "mr0ibrahim-motion",
+  "owner": { "name": "Ebrahim Mohammed", "url": "https://github.com/mr0ibrahim" },
+  "plugins": [
+    { "name": "motion-graphics", "source": "./", "description": "Motion graphics studio skill: storyboard, AI assets, code animation, SFX and QA to MP4.", "version": "2.0.0" }
+  ]
+}

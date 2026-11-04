@@ -32,6 +32,7 @@ Also: Arabic animates by whole words only (`references/arabic-rtl.md`) · no AI-
 9:16 1080×1920 for social, 16:9 for web/YouTube · energy `ad` for ads and reels, `explainer` for VO explainers, `calm` for luxury/long chapters · 60 fps master + 30 fps social · −14 LUFS, true peak ≤ −1.5 dBTP · SFX + VO, no music · static grain 0.06 · illustrated flat style, one accent colour, Noto Kufi Arabic / Cairo + Figtree.
 
 ## Setup
+All `scripts/`, `templates/` and `references/` paths are relative to this skill's own folder (the folder holding this SKILL.md, wherever it was installed: `.claude/skills/motion-graphics`, `.agents/skills/motion-graphics`, `~/.cursor/skills/motion-graphics`, …). Call that `$SKILL_DIR` and run scripts as `node "$SKILL_DIR/scripts/render.mjs" …` from the project folder. Run `npm i` once inside `$SKILL_DIR`.
 `npm i` (Playwright), then `npx playwright install chromium` once. You also need ffmpeg/ffprobe, Python 3 with numpy/scipy/pillow (QA, cut2), and `pip install faster-whisper` for `align.py`.
 
-Worked examples: `demo-ar/` (a 13 s Gulf-Arabic app ad: RTL kinetic type, AI characters, parallax, camera push, zoom/push/iris/split) · `demo/` (a 10.5 s English SAMPLE ad).
+Worked examples (in the GitHub repo mr0ibrahim/motion under `examples/`, not copied on install): `demo-ar/` (a 13 s Gulf-Arabic app ad: RTL kinetic type, AI characters, parallax, camera push, zoom/push/iris/split) · `demo/` (a 10.5 s English SAMPLE ad).
