@@ -1,0 +1,67 @@
+[
+ {
+  "n": 1,
+  "t0": 0,
+  "t1": 2,
+  "key": 1.6,
+  "shot": "HOOK — problem in 4 words, kinetic type",
+  "vo": "",
+  "text": "Forgot to drink again?",
+  "motion": "whole words rise in masks (stagger), accent rule draws on",
+  "transition": "open",
+  "sfx": "tick on rule, swish",
+  "notes": ""
+ },
+ {
+  "n": 2,
+  "t0": 2,
+  "t1": 4.1,
+  "key": 3.6,
+  "shot": "REVEAL — product hero, camera push, parallax",
+  "vo": "",
+  "text": "Meet Lumo.",
+  "motion": "bottle drops in on an arc (squash/stretch ≤8%), name pops, seeded burst",
+  "transition": "iris (0.34s, ends on cut)",
+  "sfx": "whoosh (iris), thud, pop, sparkle",
+  "notes": ""
+ },
+ {
+  "n": 3,
+  "t0": 4.1,
+  "t1": 6.2,
+  "key": 5.9,
+  "shot": "PROOF — app UI demo",
+  "vo": "",
+  "text": "It tracks every sip.",
+  "motion": "phone card slides up, cursor arcs to the button and taps, counter 0→8, bars grow",
+  "transition": "blob (0.34s, ends on cut)",
+  "sfx": "whoosh, click, tick, swish",
+  "notes": ""
+ },
+ {
+  "n": 4,
+  "t0": 6.2,
+  "t1": 8.4,
+  "key": 8,
+  "shot": "BENEFITS — 3 icons + 2.5D flip card",
+  "vo": "",
+  "text": "Glows when you need water.",
+  "motion": "icons stagger in on arcs, card flips to reveal glow state",
+  "transition": "wipe (0.34s, ends on cut)",
+  "sfx": "whoosh, pop×3, swish",
+  "notes": ""
+ },
+ {
+  "n": 5,
+  "t0": 8.4,
+  "t1": 10.5,
+  "key": 10.2,
+  "shot": "CTA — logo + offer pill",
+  "vo": "",
+  "text": "Lumo. Sample ad.",
+  "motion": "logo mask-reveals, pill pops, underline draws",
+  "transition": "split (0.34s, ends on cut)",
+  "sfx": "whoosh, pop, chime",
+  "notes": ""
+ }
+]

@@ -1,0 +1,278 @@
+<!doctype html>
+<!-- film.src.html — STARTER FILM (motion-graphics skill). Every frame is a pure function of t: window.seek(t).
+     Build:  node ../scripts/inline-fonts.mjs film.src.html film.html "Cairo|200 1000|fonts/Cairo.ttf" "Figtree|300 900|fonts/Figtree.ttf" [--words words.json]
+     Edit only: CONFIG, SCENES (and add icons/recipes). The engine below them implements the motion system:
+     one token set, scene-owned captions, transition library, camera/parallax, recipes, static grain, auto SFX, BOARD for the storyboard.
+     Preview: open film.html in a browser (loops; add ?safe for the safe-zone overlay, ?t=3.2 to freeze a time). Render: ?render. -->
+<html><head><meta charset="utf-8"><style>
+/*FONTS*/
+html,body{margin:0;background:#000;overflow:hidden}*{box-sizing:border-box}
+#stage{position:absolute;left:0;top:0;overflow:hidden;transform-origin:0 0}
+.sc{position:absolute;inset:0;display:none;overflow:hidden}
+.e{position:absolute;will-change:transform,opacity;white-space:nowrap}
+.wrap{white-space:normal}
+.kick{text-align:center;font-weight:700;opacity:.75}
+.h1{text-align:center;font-weight:900;line-height:1.18;white-space:normal}
+.card{border-radius:28px;padding:26px 34px;box-shadow:0 24px 50px rgba(0,0,0,.22)}
+.pill{border-radius:999px;padding:12px 34px;font-weight:800;font-size:40px;white-space:nowrap;display:flex;align-items:center;gap:14px}
+.cap{position:absolute;text-align:center;font-weight:800;line-height:1.5;display:none}
+.cw{display:inline-block;padding:0 .12em;margin:0 .02em;border-radius:12px;position:relative}
+.cw .hb{position:absolute;inset:.1em -.02em;border-radius:12px;opacity:0;z-index:-1}
+.cw span{position:relative}
+.kw{display:inline-block;overflow:hidden;padding:.22em .06em .28em;margin:-.22em 0 -.28em;vertical-align:top}
+.kw>span{display:inline-block}
+.ico{display:block}
+#edge{position:absolute;top:0;width:14px;display:none}
+#grain{position:absolute;left:0;top:0;pointer-events:none;mix-blend-mode:overlay}
+#safe{position:absolute;pointer-events:none;outline:3px dashed #0f0;display:none;z-index:2000}
+</style></head><body><div id="stage"><div id="edge"></div><canvas id="grain"></canvas><div id="safe"></div></div>
+<script>
+/* =========================== CONFIG (edit) =========================== */
+const FORMATS={'9:16':[1080,1920],'16:9':[1920,1080],'1:1':[1080,1080],'4:5':[1080,1350]};
+const CFG={
+  format:'9:16', duration:12.0, lang:'en', dir:'ltr',          // Arabic: lang:'ar', dir:'rtl'
+  font:"Figtree, Cairo, sans-serif",
+  pal:{ a:'#F2F2EF', b:'#141316', acc:'#FF4F1A', acc2:'#2F47FF', mute:'#8d8a93' }, // one accent; brand colours replace acc
+  bgs:{ A:['#F2F2EF','#141316','#FF4F1A'], B:['#141316','#F2F2EF','#FF4F1A'], C:['#FF4F1A','#FFFFFF','#141316'] }, // bg, fg, accent per background
+  energy:'ad',              // 'ad' (punchy, 100-130 BPM cuts) | 'explainer' (calmer) | 'sting' | 'calm'
+  captions:null,            // null = auto: ON when there is a voice-over (WORDS), OFF for no-VO films (the on-screen type IS the copy). true/false to force
+  music:false,              // DEFAULT: no music bed — motion-synced SFX (+ voice). Opt-in only.
+  grain:.06,                // STATIC grain opacity (never re-randomised per frame); 0 = off
+};
+const WORDS=/*WORDS*/;      // from align.py (VO) — or null: captions/supers are timed from SCRIPT below
+const SCRIPT=[ /* [startTime, "line"] — used when WORDS is null (no-VO ads, supers). Words appear at READ pace. */ ];
+/* ===================================================================== */
+const [VW,VH]=FORMATS[CFG.format]; window.VIDEO={w:VW,h:VH,duration:CFG.duration};
+document.documentElement.lang=CFG.lang; document.documentElement.dir=CFG.dir; const RTL=CFG.dir==='rtl', FWD=RTL?-1:1; // reading direction
+// SAFE ZONE per format (x0,y0,x1,y1): visuals in [x0..x1]x[y0..vis1], captions band [cap0..cap1]; bottom/right UI kept clear
+const SAFE={'9:16':{x0:80,x1:960,y0:150,vis1:1000,cap0:1070,cap1:1360},'16:9':{x0:96,x1:1824,y0:54,vis1:820,cap0:850,cap1:1010},
+  '1:1':{x0:60,x1:1020,y0:60,vis1:760,cap0:800,cap1:1010},'4:5':{x0:60,x1:1020,y0:60,vis1:900,cap0:950,cap1:1140}}[CFG.format];
+if(!(CFG.captions??!!WORDS)) SAFE.vis1=SAFE.cap1;   // no captions -> visuals may use the caption band (re-centre the composition)
+/* ======================= MOTION TOKENS (one set) ======================= */
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), lerp=(a,b,k)=>a+(b-a)*k, seg=(t,a,b)=>clamp((t-a)/(b-a));
+const eOut=x=>1-Math.pow(1-clamp(x),3), eIn=x=>Math.pow(clamp(x),3), eIO=x=>(x=clamp(x),x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2);
+const eOutQ=x=>1-Math.pow(1-clamp(x),5);   // for whips/zooms (fast start, long tail)
+const ENERGY={ ad:{IN:.34,OUT:.22,WIPE:.34,MOVE:.55,STAG:.09}, sting:{IN:.30,OUT:.2,WIPE:.30,MOVE:.5,STAG:.08},
+  explainer:{IN:.40,OUT:.25,WIPE:.42,MOVE:.70,STAG:.12}, calm:{IN:.5,OUT:.3,WIPE:.55,MOVE:.9,STAG:.15} }[CFG.energy];
+const {IN,OUT,WIPE,MOVE,STAG}=ENERGY, XF=.15;            // XF: cross-fade for every state change (never snap)
+const LEAD=IN*.415;                                       // eOut(0.415)=0.80 -> an element is 80% in ON its word (±2 frames)
+// damped spring 0->1. RULE: z >= 0.78  ->  overshoot <= 2%.  Presets: settle(w14,z.9), ui(w22,z.86), soft(w10,z.95), cam(w7.5,z1)
+function spring(t,w=14,z=.9){ if(t<=0)return 0; z=Math.max(z,.78); if(z>=1)return 1-Math.exp(-w*t)*(1+w*t);
+  const wd=w*Math.sqrt(1-z*z); return 1-Math.exp(-z*w*t)*(Math.cos(wd*t)+(z*w/wd)*Math.sin(wd*t)); }
+const SP={settle:[14,.9],ui:[22,.86],soft:[10,.95],cam:[7.5,1]}; const sp=(t,k='settle')=>spring(t,...SP[k]);
+// eased keyframes: kf([[t0,v0],[t1,v1,easeFn?],...])(t)
+const kf=keys=>t=>{ if(t<=keys[0][0])return keys[0][1]; for(let i=1;i<keys.length;i++){ const [a,va]=keys[i-1],[b,vb,e=eIO]=keys[i]; if(t<=b)return lerp(va,vb,e((t-a)/(b-a))); } return keys[keys.length-1][1]; };
+const rng=s=>()=>(s=(s+0x6D2B79F5)|0,s=Math.imul(s^(s>>>15),1|s),s^=s+Math.imul(s^(s>>>7),61|s),((s^(s>>>14))>>>0)/4294967296);
+const qb=(p0,c,p1,k)=>(1-k)*(1-k)*p0+2*(1-k)*k*c+k*k*p1;   // quadratic bezier -> arcs, never straight diagonal moves
+/* ============================ WORD TIMES ============================ */
+const NORM=w=>(CFG.lang==='ar'?w.replace(/[\u064B-\u0652\u0670\u0640]/g,'').replace(/[^\u0621-\u064A0-9a-zA-Z]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي'):w.toLowerCase().replace(/[^a-z0-9']/g,''));
+let WD=[]; const mkWD=()=>{ WD=(WORDS||SCRIPT.flatMap(([t0,txt],li)=>{ let t=t0; return txt.split(/\s+/).filter(Boolean).map(w=>{ const r={w,s:t,line:li}; t+=.10+w.length*.035; return r; }); }));
+WD.forEach(w=>w.n=NORM(w.w)); }; const MISS=window.MISS=[];
+// W('word', after): time of the first matching word at/after `after`. Misses are recorded in window.MISS (check = []).
+function W(q,after=0){ const n=NORM(q); const x=WD.find(w=>w.s>=after-.05&&(w.n===n||(n.length>2&&w.n.endsWith(n))||(n.length>4&&w.n.includes(n)))); if(!x){ MISS.push(q+'@'+after.toFixed(2)); return after+.5; } return x.s; }
+/* ============================== ICONS =============================== */
+// Flat SVG icons (consistent 100-unit grid, stroke 7-13, round caps). Add from Lucide/Tabler/Phosphor (MIT) as paths. NO emoji.
+const S=(b,sz,ex='')=>`<svg class="ico" width="${sz}" height="${sz}" viewBox="0 0 100 100" ${ex}>${b}</svg>`;
+const I={
+ check:(c,s=80)=>S(`<polyline points="20,52 42,73 82,28" fill="none" stroke="${c}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>`,s),
+ cross:(c,s=80)=>S(`<path d="M27 27 L73 73 M73 27 L27 73" stroke="${c}" stroke-width="13" stroke-linecap="round"/>`,s),
+ bolt:(c,s=110)=>S(`<path d="M58 8 L22 56 h24 l-8 36 l38 -52 h-26z" fill="${c}"/>`,s),
+ bubble:(c,s=120,c2='#fff')=>S(`<path d="M18 16 h64 a10 10 0 0 1 10 10 v38 a10 10 0 0 1 -10 10 h-36 l-20 16 v-16 h-8 a10 10 0 0 1 -10 -10 v-38 a10 10 0 0 1 10 -10z" fill="${c}"/><circle cx="34" cy="45" r="6" fill="${c2}"/><circle cx="50" cy="45" r="6" fill="${c2}"/><circle cx="66" cy="45" r="6" fill="${c2}"/>`,s),
+ chart:(c,s=110)=>S(`<rect x="14" y="56" width="16" height="30" rx="3" fill="${c}"/><rect x="42" y="36" width="16" height="50" rx="3" fill="${c}"/><rect x="70" y="16" width="16" height="70" rx="3" fill="${c}"/>`,s),
+ shield:(c,s=110,c2='#fff')=>S(`<path d="M50 8 l34 13 v26 c0 22 -15 36 -34 45 c-19 -9 -34 -23 -34 -45 v-26z" fill="${c}"/><polyline points="34,50 46,62 68,38" fill="none" stroke="${c2}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`,s),
+ drop:(c,s=110)=>S(`<path d="M50 8 C50 8 18 46 18 64 a32 32 0 0 0 64 0 C82 46 50 8 50 8z" fill="${c}"/>`,s),
+ bell:(c,s=110)=>S(`<path d="M50 12 c-16 0 -26 12 -26 28 v18 l-10 14 h72 l-10 -14 v-18 c0 -16 -10 -28 -26 -28z" fill="${c}"/><circle cx="50" cy="82" r="8" fill="${c}"/>`,s),
+ battery:(c,s=110)=>S(`<rect x="10" y="30" width="72" height="40" rx="8" fill="none" stroke="${c}" stroke-width="7"/><rect x="84" y="42" width="7" height="16" rx="2" fill="${c}"/><rect x="18" y="38" width="44" height="24" rx="3" fill="${c}"/>`,s),
+ cursor:(c,s=70,c2='#fff')=>S(`<path d="M22 10 L22 82 L40 66 L52 92 L64 86 L52 61 L76 60 Z" fill="${c}" stroke="${c2}" stroke-width="5" stroke-linejoin="round"/>`,s),
+ person:(c,s=100)=>S(`<circle cx="50" cy="32" r="17" fill="${c}"/><path d="M18 90 c0 -24 14 -34 32 -34 s32 10 32 34z" fill="${c}"/>`,s),
+ num:(n,c,s=130,c2='#fff')=>S(`<circle cx="50" cy="50" r="44" fill="${c}"/><text x="50" y="68" text-anchor="middle" font-family="${CFG.font}" font-weight="900" font-size="50" fill="${c2}">${n}</text>`,s),
+};
+const card=(bg,fg,html,css='')=>`<div class="card" style="background:${bg};color:${fg};${css}">${html}</div>`;
+const pill=(bg,fg,html,css='')=>`<div class="pill" style="background:${bg};color:${fg};${css}">${html}</div>`;
+/* ============================== ENGINE ============================== */
+const stage=document.getElementById('stage'); stage.style.cssText+=`width:${VW}px;height:${VH}px;font-family:${CFG.font}`;
+const mk=(tag,cls,css,par,html)=>{ const d=document.createElement(tag); if(cls)d.className=cls; if(css)d.style.cssText=css; if(html!=null)d.innerHTML=html; par.appendChild(d); return d; };
+const SC=[]; window.SCENES=SC; window.BOARD=[];
+/* scene({at, bg:'A'|'B'|'C', tr:'wipe'|'iris'|'split'|'push'|'zoom'|'blinds'|'glitch'|'blob'|'morph'|'cut', trOpt, cam, hl:[words], board:{shot,motion,sfx,notes}}, build)
+   at = start time (number) or a word (string, its spoken time). The transition FINISHES at `at`. */
+function scene(o,build){ SC.push({...o,build}); }
+// element: at = its word time (80% in ON the word). Options: a: in|fade|pop|mask|draw|grow|stroke|flip|drop|count|words|textpath|none
+//   from:[dx,dy] entry offset (default [0,40]), arc:[cx,cy] control point (curved path), out:time, od:dur, depth (parallax, 1=mid),
+//   mv:[[t,dx,dy,cx?,cy?],...] later moves (eIO, arcs), sfx:'pop'|'tick'|..., count:[from,to,dur,fmt], per (word stagger)
+function E(s,at,html,css,o={}){ const el=mk('div','e',css,s.layer,html); if(o.bleed) el.dataset.bleed=1; /* bleed:true = may cross the frame edge on purpose (hero cut by the frame bottom) */ const it={el,at,a:o.a||'in',...o,od:o.od||OUT}; s.items.push(it); return it; }
+const TR={   // transition library: (p 0..1 eased by the engine, incoming scene s, outgoing scene q) -> styles
+  wipe:(p,s)=>{ s.root.style.clipPath=s.dir>0?`inset(0 0 0 ${((1-p)*100).toFixed(3)}%)`:`inset(0 ${((1-p)*100).toFixed(3)}% 0 0)`; return {edge:s.dir>0?(1-p)*VW:p*VW}; },
+  iris:(p,s)=>{ const [x,y]=s.trOpt?.at||[VW/2,VH/2]; s.root.style.clipPath=`circle(${(p*Math.hypot(VW,VH)).toFixed(1)}px at ${x}px ${y}px)`; },
+  split:(p,s)=>{ const h=((1-p)*50).toFixed(3); s.root.style.clipPath=VW<VH?`inset(${h}% 0 ${h}% 0)`:`inset(0 ${h}% 0 ${h}%)`; },
+  push:(p,s,q)=>{ const d=s.dir*VW; s.root.style.transform=`translateX(${((1-p)*d).toFixed(1)}px)`; if(q) q.root.style.transform=`translateX(${(-p*d).toFixed(1)}px)`; },
+  zoom:(p,s,q)=>{ if(q){ q.root.style.transform=`scale(${(1+p*1.6).toFixed(4)})`; q.root.style.opacity=(1-seg(p,.35,.8)).toFixed(4); }
+    s.root.style.opacity=seg(p,.35,.8).toFixed(4); s.root.style.transform=`scale(${(1.25-.25*p).toFixed(4)})`; },
+  blinds:(p,s)=>{ const n=s.trOpt?.n||6, bw=VW/n, pts=[]; for(let i=0;i<n;i++){ const k=eIO(seg(p,i*.06,1-(n-1-i)*.06)); const x0=i*bw, x1=x0+bw*k; pts.push(`${x0}px ${VH}px`,`${x0}px 0px`,`${x1}px 0px`,`${x1}px ${VH}px`); } s.root.style.clipPath=`polygon(${pts.join(',')})`; },
+  glitch:(p,s)=>{ const n=10, r=rng(s.i*97+3), pts=[]; for(let i=0;i<n;i++){ const d=r()*.35, k=p>=1?1:Math.floor(eIO(seg(p,d,d+.65))*4)/4;   // stepped slices, seeded (tech only)
+      const y0=i*VH/n, y1=y0+VH/n; const x=(s.dir>0?(1-k):0)*VW, w=k*VW; pts.push(`${x}px ${y1}px`,`${x}px ${y0}px`,`${x+w}px ${y0}px`,`${x+w}px ${y1}px`); }
+    s.root.style.clipPath=`polygon(${pts.join(',')})`; },
+  blob:(p,s)=>{ const [x,y]=s.trOpt?.at||[VW/2,VH*.45], R=p*Math.hypot(VW,VH)*1.05, ph=s.i*1.7, pts=[];            // liquid / ink
+    for(let a=0;a<64;a++){ const th=a/64*Math.PI*2, r=R*(1+.10*Math.sin(3*th+ph+p*2)+.05*Math.sin(5*th-ph)); pts.push(`${(x+r*Math.cos(th)).toFixed(1)}px ${(y+r*Math.sin(th)).toFixed(1)}px`); }
+    s.root.style.clipPath=`polygon(${pts.join(',')})`; },
+  morph:(p,s)=>{ const [x,y,w,h,r]=s.trOpt?.from||[VW*.3,VH*.4,VW*.4,VH*.2,40];                                     // a card grows into the next frame
+    const t=lerp(y,0,p), l=lerp(x,0,p), b=lerp(VH-y-h,0,p), rr=lerp(VW-x-w,0,p); s.root.style.clipPath=`inset(${t}px ${rr}px ${b}px ${l}px round ${lerp(r,0,p)}px)`; },
+  cut:()=>{},
+};
+function build(){ mkWD();
+  SC.forEach((s,i)=>{ s.i=i; s.t0=typeof s.at==='string'?W(s.at,i?SC[i-1].t0??0:0)-.06:(s.at??0); if(!i) s.t0=0; });
+  let flip=1;
+  SC.forEach((s,i)=>{ s.t1=SC[i+1]?SC[i+1].t0:VIDEO.duration; s.tr=i?(s.tr||'wipe'):'cut'; s.dir=s.dir||(flip=-flip)*-FWD;
+    s.trd=s.tr==='cut'?0:(s.trd||(s.tr==='zoom'?WIPE*1.3:s.tr==='glitch'?WIPE*.8:WIPE));
+    const [bg,fg,ac]=CFG.bgs[s.bg||'A']; Object.assign(s,{bgc:bg,fg,ac});
+    s.root=mk('div','sc',`background:${bg};color:${fg}`,stage); s.layer=s.root; s.items=[]; s.fx=[];
+    s.cam=s.cam||null;   // e.g. {z:kf([[t0,1],[t1,1.06]]), x:..., y:...}  -> parallax by item.depth
+    s.build(s, (q,after)=>W(q,after??s.t0-.05));
+    // ---- captions: OWNED by the scene (inside s.root -> they wipe/push/zoom WITH it, scene colours) ----
+    s.caps=[]; if(CFG.captions??!!WORDS){ const nx=SC[i+1]; const ws=WD.filter(x=>x.s>=s.t0+.01-(i?0:1)&&(!nx||x.s<s.t1+.05));
+      const ch=[]; let cur=[]; ws.forEach((x,k)=>{ cur.push(x); const n=ws[k+1]; const punct=/[،.؟?!:؛,]$/.test(x.w);
+        if(!n||cur.length>=6||(punct&&cur.length>=3)||(n.s-x.s>.9&&cur.length>=2)){ ch.push(cur); cur=[]; } });
+      for(let k=ch.length-1;k>0;k--) if(ch[k].length<=2&&ch[k-1].length+ch[k].length<=7) ch[k-1].push(...ch.splice(k,1)[0]);
+      s.caps=ch.map(c=>{ const d=mk('div','cap',`left:${SAFE.x0}px;width:${SAFE.x1-SAFE.x0}px;top:${SAFE.cap0}px;color:${fg};font-size:${VW<VH?60:52}px`,s.root);
+        const words=c.map(x=>{ const isH=(s.hl||[]).some(h=>x.n.includes(NORM(h))); const sp=mk('span','cw','',d); const hb=isH?mk('i','hb',`background:${ac}`,sp):null;
+          const tx=mk('span','',isH?`color:${bg===ac?fg:bg}`:'',sp,x.w); d.appendChild(document.createTextNode(' ')); return {sp,hb,tx,t:x.s}; });
+        return {d,words,t0:c[0].s-LEAD}; });
+      s.caps.forEach((c,k)=>{ c.t1=s.caps[k+1]?s.caps[k+1].t0-.02:s.t1+1; }); }
+    const vo=WD.filter(x=>x.s>=s.t0-.01&&x.s<s.t1).map(x=>x.w).join(' ');
+    BOARD.push({n:i+1,t0:+s.t0.toFixed(2),t1:+s.t1.toFixed(2),tr:s.tr,trd:+s.trd.toFixed(2),key:s.key,shot:s.board?.shot||'',vo:WORDS?vo:'',text:s.board?.text||(WORDS?'':vo),
+      motion:s.board?.motion||'',transition:i?`${s.tr} (${s.trd.toFixed(2)}s, ends on cut)`:'open',sfx:s.board?.sfx||'',notes:s.board?.notes||''});
+  });
+}
+/* ------------------------------ recipes ------------------------------ */
+const R={
+  // kinetic type: WHOLE words (never letters — Arabic joining), mask-rise, stagger in reading order. per=STAG
+  words:(s,at,text,css,o={})=>E(s,at,text.split(/\s+/).map(w=>`<span class="kw"><span>${w}</span></span>`).join(' '),css,{a:'words',per:o.per??STAG,...o}),
+  // counter: count:[from,to,dur,format]
+  counter:(s,at,css,from,to,o={})=>E(s,at,'',css,{a:'count',count:[from,to,o.dur||.9,o.fmt||(v=>Math.round(v).toLocaleString(CFG.lang==='ar'?'ar-EG':'en-US'))],...o}),
+  // bar chart build: bars grow from the baseline with stagger; values 0..1
+  bars:(s,at,x,y,vals,o={})=>vals.map((v,k)=>E(s,at+k*STAG,'',`left:${x+k*(o.bw||70)*1.5}px;top:${y-(o.h||300)*v}px;width:${o.bw||70}px;height:${(o.h||300)*v}px;border-radius:10px 10px 0 0;background:${o.colors?.[k]||o.color||s.ac}`,{a:'grow',sfx:k?'':'swish'})),
+  // line draw-on: any SVG markup with pathLength="1" on its paths
+  draw:(s,at,svg,css,o={})=>E(s,at,svg,css,{a:'stroke',...o}),
+  // particles: seeded radial burst (deterministic), n dots
+  burst:(s,at,x,y,o={})=>{ const r=rng(o.seed||7), n=o.n||14; for(let k=0;k<n;k++){ const th=r()*Math.PI*2, d=(o.dist||160)*(.55+r()*.6), sz=6+r()*10;
+      E(s,at,'',`left:${x-sz/2}px;top:${y-sz/2}px;width:${sz}px;height:${sz}px;border-radius:50%;background:${o.color||s.ac}`,{a:'particle',vec:[Math.cos(th)*d,Math.sin(th)*d],life:o.life||.7}); } },
+  // UI cursor demo: path of [t,x,y,click?]; moves on arcs (eIO), press = scale .9 + ripple
+  cursor:(s,keys,o={})=>{ const c=E(s,keys[0][0],I.cursor(o.color||'#111',o.size||70,'#fff'),`left:0;top:0;z-index:50`,{a:'cursor',keys,sfx:''});
+    keys.filter(k=>k[3]).forEach(k=>E(s,k[0],'',`left:${k[1]-40}px;top:${k[2]-40}px;width:80px;height:80px;border-radius:50%;border:5px solid ${o.ring||s.ac}`,{a:'ripple',sfx:'click'})); return c; },
+  // 2.5D card flip with perspective: front enters at `show` (its word), flips to the back at `at`
+  flip:(s,show,at,front,back,css)=>{ E(s,at,front,css+';backface-visibility:hidden',{a:'flip',side:0,show,sfx:''}); E(s,show,'','left:0;top:0;width:1px;height:1px',{a:'none',sfx:'pop'}); E(s,at,back,css+';backface-visibility:hidden',{a:'flip',side:1,sfx:'swish'}); },
+  // text on a path (SVG textPath) that writes along the curve
+  textPath:(s,at,d,text,css,o={})=>E(s,at,`<svg width="${o.w||800}" height="${o.h||300}" style="overflow:visible"><path id="tp${s.i}_${s.items.length}" d="${d}" fill="none"/><text font-size="${o.fs||56}" font-weight="800" fill="${o.color||s.fg}"><textPath href="#tp${s.i}_${s.items.length}" startOffset="100%">${text}</textPath></text></svg>`,css,{a:'textpath',...o}),
+};
+/* ------------------------------ per-frame ------------------------------ */
+function applyItem(it,t,s){ const el=it.el, st=it.at-LEAD; let o=1,x=0,y=0,sc=1,extra='';
+  const [fx,fy]=it.from||[0,40];
+  switch(it.a){
+    case 'in': case 'drop': { const k=eOut(seg(t,st,st+IN)); o=clamp(k*1.4); x=it.arc?qb(fx,it.arc[0],0,k):fx*(1-k); y=it.arc?qb(fy,it.arc[1],0,k):fy*(1-k);
+      if(it.a==='drop'){ const land=it.at, sq=seg(t,land-.05,land+.18); const sy=t<land?1+.06*(1-k)*k*4:1-.08*Math.sin(Math.PI*sq)*(1-sq);   // squash & stretch (illustrated only)
+        extra=` scale(${(2-sy).toFixed(4)},${sy.toFixed(4)})`; el.style.transformOrigin='50% 100%'; } break; }
+    case 'fade': o=eOut(seg(t,st,st+IN)); break;
+    case 'pop': { const k=eOut(seg(t,st,st+IN)); o=clamp(k*1.6); sc=t<st?.9:.9+.1*sp(t-st); break; }      // <=2% overshoot (settle spring)
+    case 'mask': { const k=eOut(seg(t,st,st+IN)); el.style.clipPath=`inset(0 0 ${((1-k)*100).toFixed(2)}% 0)`; y=(1-k)*24; o=t<st?0:1; break; }
+    case 'draw': { const k=eIO(seg(t,it.at-.38,it.at+.22)); o=t<it.at-.38?0:1; el.style.transformOrigin=(it.origin||(RTL?'100% 50%':'0 50%')); extra=` scaleX(${k.toFixed(4)})`; break; }
+    case 'grow': { const k=eIO(seg(t,it.at-.38,it.at+.22)); o=t<it.at-.38?0:1; el.style.transformOrigin='50% 100%'; extra=` scaleY(${k.toFixed(4)})`; break; }
+    case 'stroke': { const k=eIO(seg(t,it.at-.38,it.at-.38+(it.dur||.8))); o=t<it.at-.38?0:1; el.querySelectorAll('[pathLength]').forEach(p=>{ p.style.strokeDasharray='1 1'; p.style.strokeDashoffset=(1-k).toFixed(4); }); break; }
+    case 'flip': { const k=eIO(seg(t,it.at-.3,it.at+.3)); const ang=it.side?(180-180*k):(-180*k); o=(it.side?k>=.5:k<.5)?1:0; if(!it.side&&it.show!=null){ const ks=eOut(seg(t,it.show-LEAD,it.show-LEAD+IN)); o*=clamp(ks*1.4); y=(1-ks)*40; } extra=` perspective(1400px) rotateY(${ang.toFixed(2)}deg)`; break; }
+    case 'count': { const [a,b,d,f]=it.count; const k=eOut(seg(t,st,st+d)); el.textContent=f(lerp(a,b,k)); o=eOut(seg(t,st,st+IN*.6)); break; }
+    case 'words': { o=t<st-.01?0:1; el.querySelectorAll('.kw>span').forEach((w,k)=>{ const ks=eOut(seg(t,st+k*it.per,st+k*it.per+IN)); w.style.transform=`translateY(${((1-ks)*110).toFixed(2)}%)`; }); break; }
+    case 'textpath': { const k=eIO(seg(t,st,st+(it.dur||.9))); const tp=el.querySelector('textPath'); tp.setAttribute('startOffset',((1-k)*100*(it.dirSign||1)).toFixed(2)+'%'); o=t<st?0:1; break; }
+    case 'particle': { const k=eOut(seg(t,it.at,it.at+it.life)); x=it.vec[0]*k; y=it.vec[1]*k+40*k*k; o=t<it.at?0:1-eIn(seg(t,it.at+it.life*.4,it.at+it.life)); sc=1-.5*k; break; }
+    case 'ripple': { const k=eOut(seg(t,it.at,it.at+.45)); o=t<it.at?0:(1-k); sc=.4+.9*k; break; }
+    case 'cursor': { const K=it.keys; let px=K[0][1],py=K[0][2]; for(let i=1;i<K.length;i++){ const [ta]=K[i-1],[tb,xb,yb]=K[i]; const mvS=tb-MOVE; if(t>=mvS){ const k=eIO(seg(t,mvS,tb)); const [xa,ya]=[K[i-1][1],K[i-1][2]];
+          px=qb(xa,(xa+xb)/2+(yb-ya)*.15,xb,k); py=qb(ya,(ya+yb)/2-(xb-xa)*.15,yb,k); } }
+        const press=Math.max(0,...K.filter(k=>k[3]).map(k=>1-Math.abs(t-k[0])/.12)); x=px; y=py; sc=1-.1*clamp(press); o=eOut(seg(t,K[0][0]-.3,K[0][0])); break; }
+    case 'none': break;
+  }
+  if(it.mv) for(const [tm,dx,dy,cx,cy] of it.mv){ const k=eIO(seg(t,tm-MOVE,tm)); if(k<=0) continue; const bx=x,by=y; x=cx!=null?qb(bx,cx,dx,k):lerp(bx,dx,k); y=cy!=null?qb(by,cy,dy,k):lerp(by,dy,k); }
+  if(it.out!=null){ const k=eIn(seg(t,it.out-it.od,it.out)); o*=1-k; if(it.od>XF) y-=k*20; }
+  if(s.cam){ const d=it.depth??1, z=s.cam.z?s.cam.z(t):1; x+=(s.cam.x?s.cam.x(t):0)*d; y+=(s.cam.y?s.cam.y(t):0)*d; sc*=1+(z-1)*d; }   // parallax: depth 0.3 bg … 1.3 fg
+  el.style.opacity=o.toFixed(4); el.style.visibility=o<.002?'hidden':'visible';
+  el.style.transform=`translate(${x.toFixed(2)}px,${y.toFixed(2)}px) scale(${sc.toFixed(4)})${extra}`; }
+const edge=document.getElementById('edge'), g=document.getElementById('grain');
+window.seek=function(t){ t=clamp(t,0,VIDEO.duration-1e-6); let edgeX=null;
+  SC.forEach((s,i)=>{ const nx=SC[i+1], on=t>=s.t0-s.trd&&t<(nx?nx.t0:1e9); s.root.style.display=on?'block':'none'; if(!on) return;
+    s.root.style.zIndex=i; s.root.style.clipPath='none'; s.root.style.transform=''; s.root.style.opacity=1;
+    const p=s.trd?eIO(seg(t,s.t0-s.trd,s.t0)):1;                                     // transitions: eased in-out, finish ON the cut, no jump
+    if(p<1){ const r=TR[s.tr](p,s,SC[i-1]); if(r&&r.edge!=null) edgeX=r.edge; }
+    s.items.forEach(it=>applyItem(it,t,s));
+    s.caps.forEach(c=>{ const on=t>=c.t0-.001&&t<c.t1; c.d.style.display=on?'block':'none'; if(!on) return;
+      const ex=eIn(seg(t,c.t1-OUT,c.t1)); c.d.style.opacity=(1-ex).toFixed(4); c.d.style.transform=`translateY(${(-ex*20).toFixed(2)}px)`;
+      c.words.forEach(x=>{ const k=eOut(seg(t,x.t-LEAD,x.t-LEAD+IN)); x.sp.style.opacity=k.toFixed(4); x.sp.style.transform=`translateY(${((1-k)*24).toFixed(2)}px)`;
+        if(x.hb) x.hb.style.opacity=seg(t,x.t,x.t+XF).toFixed(4); }); });
+  });
+  edge.style.display=edgeX!=null?'block':'none'; if(edgeX!=null){ edge.style.left=(edgeX-7).toFixed(1)+'px'; edge.style.zIndex=999; }
+  g.style.zIndex=1000; };
+/* --------------------- layout check (safe zone / overlap) --------------------- */
+window.checkLayout=function(t){ seek(t); const out=[], st=stage.getBoundingClientRect(), k=VW/st.width;
+  // measures the INK (content range), not the layout box; ignores bg layers (depth<.6), particles, cursor, tiny holders.
+  // Only SETTLED elements are judged (entries/exits in flight are allowed to cross). Full containment = intentional layering (bars on a card); PARTIAL overlap = a collision -> reported.
+  const ink=el=>{ const ws=[...el.querySelectorAll('.kw>span')]; if(ws.length){ const rs=ws.map(w=>w.getBoundingClientRect()); return {left:Math.min(...rs.map(r=>r.left)),top:Math.min(...rs.map(r=>r.top)),right:Math.max(...rs.map(r=>r.right)),bottom:Math.max(...rs.map(r=>r.bottom))}; }
+    const rg=document.createRange(); rg.selectNodeContents(el); const r=rg.getBoundingClientRect(); return r.width>2?r:el.getBoundingClientRect(); };
+  SC.filter((s,i)=>s.root.style.display==='block'&&!(SC[i+1]&&t>=SC[i+1].t0-(SC[i+1].trd||0)-.02)).forEach(s=>{ /* a scene being transitioned OUT is not judged */ const vis=[...s.items.filter(it=>t>=it.at+IN+(it.per||0)*6&&(it.out==null||t<it.out-it.od)&&it.el.style.visibility!=='hidden'&&+it.el.style.opacity>.5&&!it.allowOverlap&&(it.depth??1)>=.6&&!['particle','ripple','cursor','none'].includes(it.a)).map(it=>it.el),
+      ...s.caps.filter(c=>c.d.style.display==='block').map(c=>c.d)];
+    const R=vis.map(el=>{ const r=ink(el); return {el,x0:(r.left-st.left)*k,y0:(r.top-st.top)*k,x1:(r.right-st.left)*k,y1:(r.bottom-st.top)*k}; }).filter(r=>r.x1-r.x0>4&&r.y1-r.y0>4);
+    const nm=el=>`"${el.textContent.replace(/\s+/g,' ').trim().slice(0,24)||el.querySelector('svg')&&'svg'||'shape'}"`;
+    R.forEach(r=>{ if(r.el.dataset.bleed) return; const cap=r.el.classList.contains('cap'); const lim=cap?[SAFE.x0,SAFE.cap0,SAFE.x1,SAFE.cap1]:[SAFE.x0,SAFE.y0,SAFE.x1,SAFE.vis1];
+      if(r.x0<lim[0]-2||r.y0<lim[1]-2||r.x1>lim[2]+2||r.y1>lim[3]+2) out.push(`scene ${s.i+1} OUT-OF-SAFE ${cap?'caption':'element'} ${nm(r.el)} [${r.x0|0},${r.y0|0},${r.x1|0},${r.y1|0}] @${t.toFixed(2)}`); });
+    for(let a=0;a<R.length;a++) for(let b=a+1;b<R.length;b++){ const A=R[a],B=R[b]; if(A.el.contains(B.el)||B.el.contains(A.el)) continue;
+      const ix=Math.min(A.x1,B.x1)-Math.max(A.x0,B.x0), iy=Math.min(A.y1,B.y1)-Math.max(A.y0,B.y0); if(ix<=8||iy<=8) continue;
+      const small=Math.min((A.x1-A.x0)*(A.y1-A.y0),(B.x1-B.x0)*(B.y1-B.y0)); if(ix*iy>=.9*small) continue;   // contained -> layered on purpose
+      out.push(`scene ${s.i+1} OVERLAP ${nm(A.el)} x ${nm(B.el)} (${ix|0}x${iy|0}px) @${t.toFixed(2)}`); } });
+  return out; };
+/* =============================== SOUND =============================== */
+// DEFAULT: motion-synced SFX only (+ the voice, mixed in mix.sh). Every SFX is generated from the SAME times as the visuals.
+window.SFX_LIST=[];
+window.buildAudio=async function(ctx){ const sr=ctx.sampleRate, r=rng(11), L=[]; window.SFX_LIST=L;
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=7000;
+  const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-18; comp.ratio.value=3; comp.attack.value=.003; comp.release.value=.15;
+  const out=ctx.createGain(); out.gain.value=.9; out.connect(lp).connect(comp).connect(ctx.destination);
+  const nb=ctx.createBuffer(1,sr*2,sr), nd=nb.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=r()*2-1;
+  const pan=(n,p)=>{ const pn=ctx.createStereoPanner(); pn.pan.value=p; n.connect(pn); pn.connect(out); };
+  const env=(g,t,a,v,d)=>{ g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(v,t+a); g.gain.exponentialRampToValueAtTime(.0001,t+d); };
+  const osc=(t,type,f0,f1,dur,v,p=0,a=.006)=>{ const o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); if(f1!==f0) o.frequency.exponentialRampToValueAtTime(f1,t+dur*.8); env(g,t,a,v,dur); o.connect(g); pan(g,p); o.start(t); o.stop(t+dur+.05); };
+  const nz=(t,dur,f0,f1,v,p=0,type='bandpass',Q=.9,att=.6)=>{ const s=ctx.createBufferSource(), f=ctx.createBiquadFilter(), g=ctx.createGain(); s.buffer=nb; s.loop=true; f.type=type; f.Q.value=Q; f.frequency.setValueAtTime(f0,t); f.frequency.exponentialRampToValueAtTime(f1,t+dur); env(g,t,dur*att,v,dur); s.connect(f).connect(g); pan(g,p); s.start(t,r()*1.5); s.stop(t+dur+.05); };
+  const F={ whoosh:(t,d,v,p)=>{ nz(t,d,250,2200,v,p,'bandpass',.8,.65); nz(t,d,120,400,v*.5,p,'lowpass',.7,.65); },
+    riser:(t,d,v,p)=>{ nz(t,d,300,6000,v,p,'bandpass',1.4,.92); osc(t,'sine',180,700,d,v*.4,p,d*.8); },
+    swish:(t,p)=>nz(t,.22,700,2600,.07,p,'bandpass',1.2,.5),
+    pop:(t,p)=>{ osc(t,'sine',420,820,.11,.09,p,.004); osc(t,'sine',140,90,.08,.045,p,.003); },
+    tick:(t,p)=>osc(t,'triangle',1500,1400,.03,.045,p,.002),
+    click:(t,p)=>{ osc(t,'square',2200,1800,.018,.03,p,.001); nz(t,.03,4000,3000,.03,p,'highpass',.7,.1); },
+    thud:(t,p)=>{ osc(t,'sine',110,48,.28,.22,p,.004); nz(t,.1,600,200,.05,p,'lowpass',.7,.15); },
+    chime:(t,p)=>[1046.5,1318.5].forEach((f,i)=>osc(t+i*.09,'sine',f,f,.6,.05,p,.008)),
+    sparkle:(t,p)=>[2093,2637,3136].forEach((f,i)=>osc(t+i*.04,'sine',f,f,.25,.025,p,.003)),
+    glitch:(t,p)=>{ for(let k=0;k<5;k++) nz(t+k*.035,.03,3000+r()*3000,1500,.05,p,'bandpass',3,.1); },
+    buzz:(t,p)=>{ osc(t,'sawtooth',150,150,.17,.05,p,.01); osc(t,'sawtooth',153,153,.17,.05,p,.01); } };
+  const TRS={wipe:'whoosh',push:'whoosh',split:'whoosh',blinds:'whoosh',iris:'whoosh',blob:'whoosh',morph:'whoosh',zoom:'riser',glitch:'glitch'};
+  SC.forEach((s,i)=>{ if(i&&s.tr!=='cut'){ const k=TRS[s.tr], tw=s.t0-s.trd-.03; L.push([+tw.toFixed(2),k]); k==='glitch'?F.glitch(s.t0-s.trd*.6,0):F[k](tw,s.trd+.12,k==='riser'?.09:.13,s.dir>0?.25:-.25); }
+    s.items.forEach(it=>{ if(!it.sfx) return; const ts=(it.a==='ripple'||it.a==='particle')?it.at:it.at-LEAD+.07;   // land ON the visual peak
+      const x=(parseFloat(it.el.style.left)||VW/2)/VW*2-1; L.push([+ts.toFixed(2),it.sfx]); F[it.sfx](ts,clamp(x*.5,-.5,.5)); }); });
+  if(CFG.music){ /* opt-in only: load the user's licensed track here with fetch+decodeAudioData, or mix it in mix.sh (4th arg). */ }
+  L.sort((a,b)=>a[0]-b[0]); };
+/* =============================== SCENES =============================== */
+// ==== SCENES START ====
+SCRIPT.push([0.15,'Your idea'],[1.6,'deserves motion.']);
+scene({bg:'B',board:{shot:'Hook',motion:'words rise in mask',sfx:'tick'}},(s,w)=>{
+  R.words(s,.3,'Your idea','left:0;right:0;top:640px;text-align:center;font-size:150px;font-weight:900');
+  E(s,.9,'','left:340px;top:860px;width:400px;height:14px;border-radius:7px;background:'+s.ac,{a:'draw',sfx:'swish'}); });
+scene({at:1.6,bg:'C',tr:'blob',board:{shot:'Payoff',motion:'pop + burst',sfx:'pop'}},(s,w)=>{
+  E(s,1.75,'deserves<br>motion.','left:0;right:0;top:560px;text-align:center;font-size:140px;font-weight:900;white-space:normal;line-height:1.05',{a:'pop',sfx:'pop'});
+  R.burst(s,1.9,540,500,{color:'#fff'}); });
+// ==== SCENES END ====
+build();
+/* ============================ GRAIN (static) ============================ */
+// ONE seeded noise tile, drawn ONCE. Never re-randomise per frame (that is visible flicker/shimmer and kills compression).
+g.width=VW/2; g.height=VH/2; g.style.width=VW+'px'; g.style.height=VH+'px'; g.style.opacity=CFG.grain;
+if(CFG.grain>0){ const gc=g.getContext('2d'), r=rng(99), d=gc.createImageData(g.width,g.height); for(let i=0;i<d.data.length;i+=4){ const v=r()*255; d.data[i]=d.data[i+1]=d.data[i+2]=v; d.data[i+3]=255; } gc.putImageData(d,0,0); }
+edge.style.height=VH+'px'; edge.style.background=CFG.pal.acc;
+function measure(){ SC.forEach(s=>{ s.root.style.display='block'; s.caps.forEach(c=>{ c.d.style.display='block'; let fs=parseFloat(c.d.style.fontSize); const mx=SAFE.cap1-SAFE.cap0;
+    while(c.d.offsetHeight>mx&&fs>36){ fs-=2; c.d.style.fontSize=fs+'px'; } c.d.style.display='none'; }); s.root.style.display='none'; }); }
+const isRender=location.search.includes('render'), Q=new URLSearchParams(location.search);
+window.ready=Promise.all([document.fonts.ready,...[...document.images].map(i=>i.decode().catch(()=>{}))]).then(()=>{ measure(); window.seek(0);
+  if(!isRender){ const sf=document.getElementById('safe'); if(Q.has('safe')){ sf.style.cssText+=`display:block;left:${SAFE.x0}px;top:${SAFE.y0}px;width:${SAFE.x1-SAFE.x0}px;height:${SAFE.cap1-SAFE.y0}px`; }
+    const fit=()=>stage.style.transform=`scale(${Math.min(innerWidth/VW,innerHeight/VH)})`; fit(); onresize=fit;
+    if(Q.has('t')) return seek(+Q.get('t')); const t0=performance.now(); (function loop(){ seek(((performance.now()-t0)/1000)%VIDEO.duration); requestAnimationFrame(loop); })(); } });
+</script></body></html>
