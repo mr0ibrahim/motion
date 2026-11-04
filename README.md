@@ -10,6 +10,7 @@
 npx skills add mr0ibrahim/motion                       # pick agents interactively
 npx skills add mr0ibrahim/motion -a claude-code -a cursor -a codex -a opencode -y
 npx skills add mr0ibrahim/motion -g                    # global (user-level)
+npx skills add mr0ibrahim/motion -a antigravity -y     # Google Antigravity (project)
 ```
 
 **Claude Code plugin:**
@@ -25,6 +26,7 @@ npx skills add mr0ibrahim/motion -g                    # global (user-level)
 npx motion-graphics-skill                    # detects your agents / asks
 npx motion-graphics-skill --agent all -y
 npx motion-graphics-skill -a claude-code,cursor -g
+npx motion-graphics-skill -a antigravity -g   # Antigravity global → ~/.gemini/config/skills
 npx motion-graphics-skill --list             # show target folders
 ```
 
@@ -34,7 +36,10 @@ npx motion-graphics-skill --list             # show target folders
 |---|---|---|
 | Claude Code | `.claude/skills/` | `~/.claude/skills/` |
 | Cursor, Codex, OpenCode, Gemini CLI, GitHub Copilot, Amp, … | `.agents/skills/` | `~/.agents/skills/` |
+| Google Antigravity (App, IDE, CLI) | `.agents/skills/` | `~/.gemini/config/skills/` |
 | Windsurf | `.windsurf/skills/` | `~/.codeium/windsurf/skills/` |
+
+> Antigravity global: `npx skills add -g -a antigravity` (skills CLI 1.7.6) writes to `~/.agents/skills`, which Antigravity does not read globally. For a global install use `npx motion-graphics-skill -a antigravity -g` or copy to `~/.gemini/config/skills/`.
 
 **Then once**, inside the installed skill folder: `npm i && npx playwright install chromium`. Also needs ffmpeg/ffprobe and Python 3 (numpy, scipy, pillow; `faster-whisper` for `align.py`).
 
@@ -62,11 +67,13 @@ bash $S/scripts/export.sh out mix.wav final/lumo_sample
 
 ### التثبيت
 
-بأمر واحد على أي منصة (Claude Code وCursor وCodex وOpenCode وGemini CLI وCopilot وWindsurf وغيرها):
+بأمر واحد على أي منصة (Claude Code وCursor وCodex وOpenCode وGemini CLI وGoogle Antigravity وCopilot وWindsurf وغيرها):
 
 ```bash
 npx skills add mr0ibrahim/motion
 npx skills add mr0ibrahim/motion -g      # لكل المشاريع
+npx skills add mr0ibrahim/motion -a antigravity -y   # انتي جرافتي (المشروع)
+npx motion-graphics-skill -a antigravity -g          # انتي جرافتي لكل المشاريع (بعد النشر)
 ```
 
 كإضافة في Claude Code:

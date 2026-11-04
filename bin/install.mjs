@@ -16,11 +16,12 @@ const AGENTS = {
   'opencode':       ['.agents/skills', '.agents/skills'],
   'gemini-cli':     ['.agents/skills', '.agents/skills'],
   'github-copilot': ['.agents/skills', '.agents/skills'],
+  'antigravity':    ['.agents/skills', '.gemini/config/skills'], // App + IDE + CLI global (antigravity.google/docs/skills)
   'windsurf':       ['.windsurf/skills', '.codeium/windsurf/skills'],
   'universal':      ['.agents/skills', '.agents/skills'],
 };
 const DETECT = { 'claude-code': '.claude', cursor: '.cursor', codex: '.codex', opencode: '.config/opencode',
-  'gemini-cli': '.gemini', 'github-copilot': '.copilot', windsurf: '.codeium/windsurf' };
+  'gemini-cli': '.gemini', 'github-copilot': '.copilot', windsurf: '.codeium/windsurf', antigravity: '.gemini/antigravity' };
 
 const a = process.argv.slice(2);
 const has = (...f) => f.some(x => a.includes(x));
