@@ -1,0 +1,15 @@
+node_modules
+out/
+demo/out/
+demo/checks*/
+demo/checks_layout.txt
+*.part
+__pycache__/
+.venv/
+demo-ar/out/
+demo-ar/checks*/
+demo-ar/checks_layout.txt
+demo-ar/render.log
+demo-ar/sfx.wav
+demo-ar/mix.wav
+demo/sheet*.png

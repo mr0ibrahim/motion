@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Storyboard — {{TITLE}}</title>
+<!-- Storyboard sheet template used by scripts/storyboard.mjs. Placeholders: {{TITLE}} {{INFO}} {{COLS}} {{PANELS}}.
+     Edit colours/fonts freely; keep the placeholders. Panels are <article class="panel"> cards. -->
+<style>
+:root{--ink:#16151a;--mute:#7b7884;--line:#e3e1e6;--acc:#e8200f;--paper:#fbfaf8}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 system-ui,'Segoe UI','Noto Sans Arabic',sans-serif;padding:28px}
+header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:3px solid var(--ink);padding-bottom:10px;margin-bottom:20px}
+h1{margin:0;font-size:26px;letter-spacing:-.01em}header .info{color:var(--mute)}
+.grid{display:grid;grid-template-columns:repeat({{COLS}},1fr);gap:18px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;break-inside:avoid;display:flex;flex-direction:column}
+.thumb{position:relative;background:#000}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.num{position:absolute;left:8px;top:8px;background:var(--acc);color:#fff;font-weight:800;border-radius:6px;padding:2px 9px;font-size:15px}
+.meta{padding:10px 12px 12px}.time{font-variant-numeric:tabular-nums;color:var(--mute);font-size:12px}.time b{color:var(--ink)}
+.shot{font-weight:700;margin:4px 0 6px}
+dl{display:grid;grid-template-columns:78px 1fr;gap:3px 8px;margin:6px 0 0}dt{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}dd{margin:0;font-size:12.5px}
+@media print{body{padding:0}.panel{page-break-inside:avoid}}
+</style></head><body>
+<header><h1>Storyboard — {{TITLE}}</h1><div class="info">{{INFO}}</div></header>
+<section class="grid">{{PANELS}}</section>
+</body></html>

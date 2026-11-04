@@ -1,0 +1,8 @@
+1080x1920 10.5s @60fps sub=4: 630 frames, 2520 screenshots, 6 chunks, 7 workers
+chunk 6/6  30/630 frames  11s  eta 222s
+chunk 1/6  150/630 frames  42s  eta 134s
+chunk 4/6  270/630 frames  43s  eta 57s
+chunk 2/6  390/630 frames  43s  eta 27s
+chunk 5/6  510/630 frames  44s  eta 10s
+chunk 3/6  630/630 frames  45s  eta 0s
+ALL CHUNKS DONE -> out/list.txt
