@@ -1,0 +1,9 @@
+{
+  "name": "motion-graphics",
+  "version": "2.0.0",
+  "description": "Motion graphics studio: ads, explainers, reels, long-form, Arabic + English, storyboard to MP4.",
+  "author": { "name": "Ebrahim Mohammed", "url": "https://github.com/mr0ibrahim" },
+  "repository": "https://github.com/mr0ibrahim/motion",
+  "license": "MIT",
+  "skills": "./skills/"
+}
